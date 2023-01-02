@@ -1,0 +1,189 @@
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  AIReconRecv:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Function ${ResourceName}
+        - ResourceName: AIReconRecv
+      CodeUri: src/sqs
+      Handler: sqs-bulk-msg-sender.handler
+      Runtime: python3.9
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Events:
+        AIReconApiPUTairecon:
+          Type: Api
+          Properties:
+            Path: /airecon
+            Method: PUT
+            RestApiId: !Ref AIReconApi
+      Environment:
+        Variables:
+          TOPIC_NAME: !GetAtt AIMLTopic.TopicName
+          TOPIC_ARN: !Ref AIMLTopic
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AIMLTopic.TopicName
+  AIReconRecvLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AIReconRecv}
+  AIReconApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${AWS::StackName}
+        - ResourceName: AIReconApi
+      StageName: Prod
+      DefinitionBody:
+        openapi: '3.0'
+        info: {}
+        paths:
+          /airecon:
+            put:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AIReconRecv.Arn}/invocations
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+  AIReconAIMLProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Function ${ResourceName}
+        - ResourceName: AIReconAIMLProcessor
+      CodeUri: src/sqs
+      Handler: sqs-aiml-processor.handler
+      Runtime: python3.9
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Events:
+        AIMLTopic:
+          Type: SNS
+          Properties:
+            Topic: !Ref AIMLTopic
+            Region: !Select
+              - 3
+              - !Split
+                - ':'
+                - !Ref AIMLTopic
+      Environment:
+        Variables:
+          TOPIC_NAME: !GetAtt AIMLResults.TopicName
+          TOPIC_ARN: !Ref AIMLResults
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AIMLResults.TopicName
+  AIReconAIMLProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AIReconAIMLProcessor}
+  AIReconPostProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Function ${ResourceName}
+        - ResourceName: AIReconPostProcessor
+      CodeUri: src/sqs
+      Handler: sqs-aiml-post-processor.handler
+      Runtime: python3.9
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref mfjmddaireconresults
+          BUCKET_ARN: !GetAtt mfjmddaireconresults.Arn
+          TABLE_NAME: !Ref mddaireconresults
+          TABLE_ARN: !GetAtt mddaireconresults.Arn
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref mfjmddaireconresults
+        - DynamoDBCrudPolicy:
+            TableName: !Ref mddaireconresults
+      Events:
+        AIMLResults:
+          Type: SNS
+          Properties:
+            Topic: !Ref AIMLResults
+            Region: !Select
+              - 3
+              - !Split
+                - ':'
+                - !Ref AIMLResults
+  AIReconPostProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AIReconPostProcessor}
+  mfjmddaireconresults:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-mfjmddair-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      PublicAccessBlockConfiguration:
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  mfjmddaireconresultsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref mfjmddaireconresults
+      PolicyDocument:
+        Id: RequireEncryptionInTransit
+        Version: '2012-10-17'
+        Statement:
+          - Principal: '*'
+            Action: '*'
+            Effect: Deny
+            Resource:
+              - !GetAtt mfjmddaireconresults.Arn
+              - !Sub ${mfjmddaireconresults.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+  mddaireconresults:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+  AIMLTopic:
+    Type: AWS::SNS::Topic
+  AIMLResults:
+    Type: AWS::SNS::Topic
+Metadata:
+  AWS::Composer::Groups:
+    Group:
+      Label: AIML PostProcessing
+      Members:
+        - AIReconPostProcessor
+        - mfjmddaireconresults
+        - mddaireconresults
+    Group2:
+      Label: AIML Processing
+      Members:
+        - AIReconAIMLProcessor
+        - AIMLResults
+    Group3:
+      Label: MSGReceiverGroup
+      Members:
+        - AIReconApi
+        - AIReconRecv
+        - AIMLTopic
