@@ -192,7 +192,7 @@ class MddDetectApigwEventbridgeStack(Stack):
         api_gw = self.defineApiGateway("RegionalAPIGW", "This is a test API Gateway with EventBridge",
                                        endpointType=endPointConfig)
         env_vars = {
-            "URL": api_gw.url,
+            "API_URL": api_gw.url,
         }
         regionalMethodFunction = self.defineFunction("RegionalMethodFunction", eventBridgeDest=True)
         cognitoLambdaMethod = self.defineFunction("EventBridgeSrc")

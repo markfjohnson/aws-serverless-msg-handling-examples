@@ -2,16 +2,22 @@ import json
 import urllib3
 import os
 
-def handler(event, context):
+def lambda_handler(event, context):
+    try:
+        print(f"Post Processor: {event.get('body')}")
 
-
-    return {
-        'statusCode': 200,
-        'headers': {
-            'Content-Type': 'text/plain'
-        },
-        'body': 'Hello, SQS ai-ml post processor received {}'.format(event["body"])
-    }
+        return {
+            'statusCode': 200,
+            "isBase64Encoded": False,
+            'headers': {
+                'Content-Type': 'application/json'
+            },
+            "processorBody": event['body'],
+            "receivedbody": event['receivedbody'],
+            'body': 'Hello, SQS ai-ml post processor received '
+        }
+    except Exception as ex:
+        return ex
 
 if __name__ == "__main__":
-    handler(None, None)
+    lambda_handler(None, None)

@@ -6,8 +6,9 @@ Resources:
       Description: !Sub
         - Stack ${AWS::StackName} Function ${ResourceName}
         - ResourceName: AIReconRecv
+      FunctionName: sqs-airecon-receiver
       CodeUri: src/sqs
-      Handler: sqs-bulk-msg-sender.handler
+      Handler: sqs-airecon-receiver.lambda_handler
       Runtime: python3.9
       MemorySize: 3008
       Timeout: 30
@@ -27,16 +28,15 @@ Resources:
             Path: /airecon
             Method: PUT
             RestApiId: !Ref AIReconApi
+
   AIReconRecvLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
     Properties:
       LogGroupName: !Sub /aws/lambda/${AIReconRecv}
   AIReconRecvQueue:
     Type: AWS::SQS::Queue
     Properties:
-      FifoQueue: true
-      ContentBasedDeduplication: true
+      QueueName: AIReconRecvQueue
       MessageRetentionPeriod: 345600
   AIReconApi:
     Type: AWS::Serverless::Api
@@ -61,11 +61,12 @@ Resources:
   AIReconAIMLProcessor:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: AIReconAIMLProcessor
       Description: !Sub
         - Stack ${AWS::StackName} Function ${ResourceName}
         - ResourceName: AIReconAIMLProcessor
       CodeUri: src/sqs
-      Handler: sqs-aiml-processor.handler
+      Handler: sqs-aiml-processor.lambda_handler
       Runtime: python3.9
       MemorySize: 3008
       Timeout: 30
@@ -75,7 +76,7 @@ Resources:
           Type: SQS
           Properties:
             Queue: !GetAtt AIReconRecvQueue.Arn
-            BatchSize: 10
+            BatchSize: 1
       Environment:
         Variables:
           QUEUE_NAME: !GetAtt AIReconPostProcessReceiver.QueueName
@@ -84,23 +85,25 @@ Resources:
       Policies:
         - SQSSendMessagePolicy:
             QueueName: !GetAtt AIReconPostProcessReceiver.QueueName
+        - AmazonAPIGatewayInvokeFullAccess
   AIReconAIMLProcessorLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
     Properties:
       LogGroupName: !Sub /aws/lambda/${AIReconAIMLProcessor}
   AIReconPostProcessReceiver:
     Type: AWS::SQS::Queue
     Properties:
+      QueueName: AIReconPostProcessReceiver
       MessageRetentionPeriod: 345600
   AIReconPostProcessor:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: sqs-aiml-post-processor
       Description: !Sub
         - Stack ${AWS::StackName} Function ${ResourceName}
         - ResourceName: AIReconPostProcessor
       CodeUri: src/sqs
-      Handler: sqs-aiml-post-processor.handler
+      Handler: sqs-aiml-post-processor.lambda_handler
       Runtime: python3.9
       MemorySize: 3008
       Timeout: 30
@@ -124,7 +127,6 @@ Resources:
             TableName: !Ref mddaireconresults
   AIReconPostProcessorLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
     Properties:
       LogGroupName: !Sub /aws/lambda/${AIReconPostProcessor}
   mfjmddaireconresults:
@@ -168,14 +170,34 @@ Resources:
           KeyType: HASH
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
+  MessageSender:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Function ${ResourceName}
+        - ResourceName: MessageSender
+      CodeUri: src/sqs
+      FunctionName: sqs-bulk-msg-sender
+      Handler: sqs-bulk-msg-sender.lambda_handler
+      Runtime: python3.9
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Environment:
+        Variables:
+          API_URL: !Sub https://${AIReconApi}.execute-api.${AWS::Region}.amazonaws.com/${AIReconApi.Stage}
+  MessageSenderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${MessageSender}
 Metadata:
   AWS::Composer::Groups:
     Group:
       Label: AIML PostProcessing
       Members:
-        - AIReconPostProcessor
         - mfjmddaireconresults
         - mddaireconresults
+        - AIReconPostProcessor
     Group2:
       Label: AIML Processing
       Members:

@@ -2,16 +2,20 @@ import json
 import urllib3
 import os
 
-def handler(event, context):
-
+def lambda_handler(event, context):
+    print(f"sqs-aiml-processor: {event['body']}")
 
     return {
         'statusCode': 200,
+        "isBase64Encoded": False,
         'headers': {
             'Content-Type': 'text/plain'
         },
-        'body': 'Hello, EventBridge Source! You have hit {}'.format(event["body"])
+        "Status": "Processed",
+        "processorBody": event['body'],
+        "receivedbody": event['receivedbody'],
+        'body': 'Hello, AIML Processor! You have hit {}'.format(event["body"])
     }
 
 if __name__ == "__main__":
-    handler(None, None)
+    lambda_handler(None, None)

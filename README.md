@@ -13,10 +13,21 @@
 
 ## Examples
 
+Pre-requisites:
+* Create a S3 bucket to hold the artifacts.  This will be used with the S3-bucket parameter option when deploying the example using SAM.
 ### SQS
 
-XXXXX
+
+#### Setup Enviornment
+``` 
+sam deploy -t sqs-template.yaml --stack-name sqs-message-example --s3-bucket mfj-sam-artifacts --capabilities CAPABILITY_IAM
+```
+
+#### Run Example
+
+```python
 
 ```
-sam deploy -t sqs-template.yaml --stack-name sqs-message-example 
-```
+
+
+

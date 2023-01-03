@@ -2,7 +2,7 @@ import json
 import urllib3
 import os
 
-def handler(event, context):
+def lambda_handler(event, context):
 
 
     return {

@@ -5,7 +5,7 @@ import os
 def handler(event, context):
 
     print('request: {}'.format(json.dumps(event)))
-    url = os.environ['URL']
+    url = os.environ['API_URL']
     max_count = 5
     url_modified = f"{url}/airecon"
     print(url_modified)
